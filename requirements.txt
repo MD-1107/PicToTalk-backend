@@ -1,0 +1,10 @@
+pip install --upgrade google-cloud-vision
+pip install --upgrade google-cloud-translate
+pip install --upgrade google-cloud-texttospeech
+pip install google-cloud-translate
+pip install Flask
+pip install Flask-cors
+pip install io
+pip install PIL
+pip install base64
+

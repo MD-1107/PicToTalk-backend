@@ -1,60 +1,97 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import math
-from bson.json_util import dumps
-import json
-import html
 import os
+from io import BytesIO
+import base64
+from PIL import Image
+from io import BytesIO
+from google.cloud import vision
+from google.cloud import translate_v2 as translate
+from google.cloud import texttospeech_v1
 
-# Imports the Google Cloud client libraries
-from google.api_core.exceptions import AlreadyExists
-from google.cloud import texttospeech
-from google.cloud import translate_v3beta1 as translate
-from google.cloud import vision
-from google.cloud import vision
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/process_image": {"origins": "http://localhost:3000"}})
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "cloudcomputing-398709-d793149a510a.json"
+# Ensure the folder for uploaded images exists
+if not os.path.exists("uploads"):
+    os.makedirs("uploads")
 
 
-def analyze_image(image_path):
-    """Analyzes the provided image file using specific feature types."""
+@app.route("/process_image", methods=["POST"])
+def process_image():
+   
 
+def analyze_translate_and_speak(image_file, target_language='en'):
+
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "cloudcomputing-398709-d793149a510a.json"
     # Initialize the Vision API client
-    client = vision.ImageAnnotatorClient()
+    vision_client = vision.ImageAnnotatorClient()
+    print(vision_client)
+    # Read the image content from the provided image file
+    content = image_file.read()
 
-    # Read the image file
-    with open(image_path, "rb") as image_file:
-        content = image_file.read()
-
+    print(content)
     # Create an image object
     image = vision.Image(content=content)
 
-    # Define the specific feature types
-    features = [
-        vision.Feature(type=vision.Feature.Type.LABEL_DETECTION),
-        vision.Feature(type=vision.Feature.Type.TEXT_DETECTION)
-    ]
+    print(target_language)
 
-    # Use the Vision API to analyze the image with the specified features
-    response = client.annotate_image({
-        'image': image,
-        'features': features
-    })
+    # Use the Vision API to detect text in the image
+    response = vision_client.text_detection(image=image)
 
-    # Extract and display the results for the specified feature types
-    if response.label_annotations:
-        print("\nLabels (Objects):")
-        for label in response.label_annotations:
-            print(label.description)
+    print(response)
 
+    # Extract and display the detected text
+    detected_text = ''
     if response.text_annotations:
-        print("\nDetected Text:")
-        for text in response.text_annotations:
-            print(f'"{text.description}"')
+        detected_text = response.text_annotations[0].description
 
-# Provide the image file name as a parameter to the function
-image_file_name = "french_menu.jpg"  # Replace with the actual image file name
-analyze_image(image_file_name)
+    # Initialize the Translation API client
+    translate_client = translate.Client()
+
+    # Translate the detected text to the desired language
+    translation = translate_client.translate(detected_text, target_language=target_language)
+
+    # Initialize the Text-to-Speech API client
+    text_to_speech_client = texttospeech_v1.TextToSpeechClient()
+
+    # Specify the voice parameters
+    voice = texttospeech_v1.VoiceSelectionParams(
+        language_code=target_language,
+        name=f"{target_language}-US-Wavenet-D",  # Adjust the voice name for your desired language and gender
+    )
+
+    # Specify the audio parameters
+    audio_config = texttospeech_v1.AudioConfig(
+        audio_encoding=texttospeech_v1.AudioEncoding.LINEAR16
+    )
+
+    # Synthesize speech from the translated text
+    synthesis_input = texttospeech_v1.SynthesisInput(text=translation['translatedText'])
+    response = text_to_speech_client.synthesize_speech(
+        input=synthesis_input,
+        voice=voice,
+        audio_config=audio_config
+    )
+
+    # Save the synthesized speech to an audio file (e.g., in-memory bytes)
+    audio_content = response.audio_content
+
+    # Create a dictionary to store all the information
+    result = {
+        'input': detected_text,
+        'translatedText': translation['translatedText'],
+        'detectedSourceLanguage': translation['detectedSourceLanguage'],
+        'audio': audio_content  # Store audio content
+    }
+
+    print(detected_text)
+    print(translation['translatedText'])
+    print(translation['detectedSourceLanguage'])
+
+    return result
+
+
+if __name__ == "__main__":
+    app.run(debug=True)

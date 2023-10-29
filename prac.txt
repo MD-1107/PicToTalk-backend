@@ -1,0 +1,248 @@
+def analyze_translate_and_speak():
+    """Analyzes the provided image file, translates the detected text, and converts it to speech."""
+
+    image_file = request.files['image']
+    target_language = request.form['target_language']
+
+    # Initialize the Vision API client
+    vision_client = vision.ImageAnnotatorClient()
+
+    # Read the image file
+    with open(image_path, "rb") as image_file:
+        content = image_file.read()
+
+    # Create an image object
+    image = vision.Image(content=content)
+
+    # Use the Vision API to detect text in the image
+    response = vision_client.text_detection(image=image)
+
+    # Extract and display the detected text
+    detected_text = ''
+    if response.text_annotations:
+        detected_text = response.text_annotations[0].description
+        print("\nDetected Text:")
+        print(f'"{detected_text}"')
+
+    # Initialize the Translation API client
+    translate_client = translate.Client()
+
+    # Translate the detected text to the desired language
+    translation = translate_client.translate(detected_text, target_language=target_language)
+
+    # Initialize the Text-to-Speech API client
+    text_to_speech_client = texttospeech_v1.TextToSpeechClient()
+
+    # Specify the voice parameters
+    voice = texttospeech_v1.VoiceSelectionParams(
+        language_code=target_language,
+        name=f"{target_language}-US-Wavenet-D",  # Adjust the voice name for your desired language and gender
+    )
+
+    # Specify the audio parameters
+    audio_config = texttospeech_v1.AudioConfig(
+        audio_encoding=texttospeech_v1.AudioEncoding.LINEAR16
+    )
+
+    # Synthesize speech from the translated text
+    synthesis_input = texttospeech_v1.SynthesisInput(text=translation['translatedText'])
+    response = text_to_speech_client.synthesize_speech(
+        input=synthesis_input,
+        voice=voice,
+        audio_config=audio_config
+    )
+
+    # Save the synthesized speech to an audio file
+    with open("audio_file2.wav", "wb") as audio_file:
+        audio_file.write(response.audio_content)
+
+    # Create a dictionary to store all the information
+    result = {
+        'input': detected_text,
+        'translatedText': translation['translatedText'],
+        'detectedSourceLanguage':translation['detectedSourceLanguage']
+    }
+    
+    print("Input Text:", result['input'])
+    print("Translated Text:", result['translatedText'])
+    print("Detected Source Language: ", result['detectedSourceLanguage'])
+    
+image_file_name = "french_menu.jpg"  # Replace with the actual image file name
+target_language = "en"  # Replace with the desired target language code
+result = analyze_translate_and_speak(image_file_name, target_language)
+
+
+
+
+
+
+
+--------------------------------------------------------------------------------------
+
+from flask import Flask, request, jsonify
+from google.cloud import vision
+from google.cloud import translate_v2 as translate
+from google.cloud import texttospeech_v1
+
+app = Flask(__name)
+
+@app.route('/process_image', methods=['POST'])
+def process_image():
+    # Get the image file from the request
+    image = request.files['image']
+
+    # Specify the target language (e.g., 'en' for English)
+    target_language = request.form['target_language']
+
+    # Initialize the Vision API client
+    vision_client = vision.ImageAnnotatorClient()
+
+    # Read the image file
+    content = image.read()
+
+    # Create an image object
+    image = vision.Image(content=content)
+
+    # Use the Vision API to detect text in the image
+    response = vision_client.text_detection(image=image)
+
+    # Extract the detected text
+    detected_text = ''
+    if response.text_annotations:
+        detected_text = response.text_annotations[0].description
+
+    # Initialize the Translation API client
+    translate_client = translate.Client()
+
+    # Translate the detected text to the desired language
+    translation = translate_client.translate(detected_text, target_language=target_language)
+
+    # Initialize the Text-to-Speech API client
+    text_to_speech_client = texttospeech_v1.TextToSpeechClient()
+
+    # Specify the voice parameters
+    voice = texttospeech_v1.VoiceSelectionParams(
+        language_code=target_language,
+        name=f"{target_language}-US-Wavenet-D",  # Adjust the voice name for your desired language and gender
+    )
+
+    # Specify the audio parameters
+    audio_config = texttospeech_v1.AudioConfig(
+        audio_encoding=texttospeech_v1.AudioEncoding.LINEAR16
+    )
+
+    # Synthesize speech from the translated text
+    synthesis_input = texttospeech_v1.SynthesisInput(text=translation['translatedText'])
+    response = text_to_speech_client.synthesize_speech(
+        input=synthesis_input,
+        voice=voice,
+        audio_config=audio_config
+    )
+
+    # Create a dictionary to store all the information
+    result = {
+        'input': detected_text,
+        'translatedText': translation['translatedText'],
+        'audio_file': response.audio_content
+    }
+
+    return jsonify(result)
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
+
+
+
+
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+
+
+
+app = Flask(__name__)
+CORS(app, resources={r"/process_image": {"origins": "http://localhost:3000"}})
+
+# ...
+
+@app.route("/process_image", methods=["POST"])
+def analyze_translate_and_speak(image_file, target_language):
+    # Initialize the Vision API client
+    vision_client = vision.ImageAnnotatorClient()
+
+    # Read the image content from the provided image file
+    content = image_file.read()
+
+    # Create an image object
+    image = vision.Image(content=content)
+
+    # Use the Vision API to detect text in the image
+    response = vision_client.text_detection(image=image)
+
+    # Extract and display the detected text
+    detected_text = ''
+    if response.text_annotations:
+        detected_text = response.text_annotations[0].description
+
+    # Initialize the Translation API client
+    translate_client = translate.Client()
+
+    # Translate the detected text to the desired language
+    translation = translate_client.translate(detected_text, target_language=target_language)
+
+    # Initialize the Text-to-Speech API client
+    text_to_speech_client = texttospeech_v1.TextToSpeechClient()
+
+    # Specify the voice parameters
+    voice = texttospeech_v1.VoiceSelectionParams(
+        language_code=target_language,
+        name=f"{target_language}-US-Wavenet-D",  # Adjust the voice name for your desired language and gender
+    )
+
+    # Specify the audio parameters
+    audio_config = texttospeech_v1.AudioConfig(
+        audio_encoding=texttospeech_v1.AudioEncoding.LINEAR16
+    )
+
+    # Synthesize speech from the translated text
+    synthesis_input = texttospeech_v1.SynthesisInput(text=translation['translatedText'])
+    response = text_to_speech_client.synthesize_speech(
+        input=synthesis_input,
+        voice=voice,
+        audio_config=audio_config
+    )
+
+    # Save the synthesized speech to an audio file (e.g., in-memory bytes)
+    audio_content = response.audio_content
+
+    # Create a dictionary to store all the information
+    result = {
+        'input': detected_text,
+        'translatedText': translation['translatedText'],
+        'detectedSourceLanguage': translation['detectedSourceLanguage'],
+        'audio': audio_content  # Store audio content
+    }
+
+    return result
+
+def process_image():
+    print(request.form)
+    image_file = request.files.get("image")
+    target_language = request.form.get("target_language", "en")
+    
+    if image_file:
+        result = analyze_translate_and_speak(image_file, target_language)
+        # Save audio file to a location or perform other actions as needed
+
+        # Respond with the result
+        return jsonify(result)
+    
+    else:
+        return "No image file provided", 400
+
+if __name__ == "__main__":
+    app.run(debug=True)
